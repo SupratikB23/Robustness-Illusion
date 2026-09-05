@@ -8,12 +8,12 @@ from audit.transforms import apply_transform
 from interp_core.viz.export import cases_payload, curves_payload, slider_payload, write_json
 
 
-def export_site(df, images: dict, out_dir: str, k: int = K_DEFAULT, n_boot: int = N_BOOTSTRAP) -> dict:
+def export_site(df, images: dict, out_dir: str, k: int = K_DEFAULT, n_boot: int = N_BOOTSTRAP, dataset: str = "imagenet-val-2k") -> dict:
     data_dir = os.path.join(out_dir, "data")
     frames_dir = os.path.join(data_dir, "frames")
     os.makedirs(frames_dir, exist_ok=True)
     present_strengths = sorted(set(df["strength"]))
-    config = {"k": k, "strengths": present_strengths, "transforms": TRANSFORMS}
+    config = {"k": k, "strengths": present_strengths, "transforms": TRANSFORMS, "dataset": dataset}
     curves, rii = {}, {}
     for t in TRANSFORMS:
         if t not in set(df["transform"]):

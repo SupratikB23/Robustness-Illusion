@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invariance Audit — Write-up</title>
+<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:0 auto;padding:24px;line-height:1.6}</style>
+</head>
+<body>
+<a href="index.html">← demo</a>
+<h1>Write-up</h1>
+<h2>Question</h2>
+<p>Robustness benchmarks check that a model's <em>output</em> survives rotation, cropping, colour jitter, and JPEG compression. This audit checks whether the <em>internal features</em> survive too, on one model (CLIP ViT-B/32), one SAE, and 2000 ImageNet validation images.</p>
+<h2>Method</h2>
+<p>For each transform at 8 strengths, output stability is the cosine similarity of image embeddings and feature stability is the Jaccard index of top-32 SAE feature sets, both against strength 0. RII is the mean gap over strengths above 0, with bootstrap CIs over images. Four nulls (random subset, shuffled pairing, k-sensitivity, threshold noise) ship with every number.</p>
+<h2>Results</h2>
+<p>See the Curves view for the four RII values. Report effect sizes, not just significance; state negative results plainly.</p>
+<h2>Nulls</h2>
+<p>Null D (threshold noise) is the critical control: if the gap vanishes when only features above twice the threshold count, the finding is threshold flicker, not representational instability — and is reported as such.</p>
+<h2>Limitations</h2>
+<p>One model, one SAE, one dataset. No claim about vision transformers in general. Features are never described as meaningful without top-activating patch contact sheets. No mitigation is proposed.</p>
+</body>
+</html>

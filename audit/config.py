@@ -1,0 +1,14 @@
+STRENGTHS = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 1.0]
+TRANSFORMS = ["rotation", "crop", "jitter", "jpeg"]
+K_DEFAULT = 32
+K_GRID = [8, 16, 32, 64, 128]
+K_MAX_STORE = 128
+SEED = 1337
+IMAGE_SIZE = 224
+MODEL_DEFAULT = "open_clip:ViT-B-32"
+SAE_DEFAULT = "Prisma-Multimodal/sae-top_k-64-cls_only-layer_9-hook_resid_post"
+ROT_MAX_DEG = 30.0
+CROP_MIN_FRAC = 0.6
+JPEG_Q_MAX = 100
+JPEG_Q_MIN = 20
+N_BOOTSTRAP = 1000

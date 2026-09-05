@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invariance Audit</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:960px;margin:0 auto;padding:24px;color:#1a1a1a}
+nav a{margin-right:16px}
+.card{border:1px solid #ddd;border-radius:8px;padding:16px;margin:16px 0}
+canvas{width:100%;height:260px}
+.slider-row{display:flex;gap:16px;flex-wrap:wrap}
+.panel{flex:1;min-width:220px}
+.entered{color:#0a7d2c}.left{color:#b00020}
+img.frame{width:100%;border-radius:8px;border:1px solid #ddd}
+</style>
+</head>
+<body>
+<nav><a href="#curves">Curves</a><a href="#slider">Slider</a><a href="#cases">Cases</a><a href="writeup.html">Write-up</a></nav>
+<h1>Invariance Audit</h1>
+<p>Does the output hold steady while the internal features turn over? RII = mean(output stability − feature stability) over strengths &gt; 0.</p>
+
+<section id="curves"><h2>1. Curves</h2><div id="curve-list"></div></section>
+
+<section id="slider"><h2>2. Slider</h2>
+<div class="card">
+<label>Transform <select id="sel-t"></select></label>
+<input id="sel-s" type="range" min="0" max="7" value="0" style="width:100%">
+<div class="slider-row">
+<div class="panel"><h3>Image</h3><img id="sl-img" class="frame" alt="transformed frame"></div>
+<div class="panel"><h3>Stability</h3><div id="sl-num"></div></div>
+<div class="panel"><h3>Features</h3><div id="sl-feat"></div></div>
+</div>
+</div>
+</section>
+
+<section id="cases"><h2>3. Cases</h2><div id="case-list"></div></section>
+
+<script src="app.js"></script>
+</body>
+</html>

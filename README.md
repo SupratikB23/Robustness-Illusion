@@ -1,4 +1,4 @@
-# Invariance Audit
+# The Robustness Illusion
 
 Measures whether a vision transformer's internal features stay stable
 under transformations that leave its output stable.

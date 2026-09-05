@@ -7,7 +7,7 @@ Read this file before writing code. Follow it over your own defaults.
 
 ## What this project is
 
-**Invariance Audit** measures whether a vision transformer's internal
+**The Robustness Illusion** measures whether a vision transformer's internal
 features stay stable under transformations that leave its output stable.
 
 A model is expected to be invariant to rotation, cropping, colour

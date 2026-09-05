@@ -1,4 +1,4 @@
-# P2: Invariance Audit
+# P2: The Robustness Illusion
 
 **Build this first.** It requires no training. It produces a deployed
 public artifact in three weeks. Its code becomes the base for P1.

@@ -26,7 +26,13 @@ def set_seed(seed: int = SEED) -> None:
         pass
 
 
-def folder_images(path: str, n: int | None = None) -> list[tuple[str, Image.Image]]:
+def folder_images(path: str, n: int | None = None, size: int | None = None) -> list[tuple[str, Image.Image]]:
+    """Load images as (filename, PIL) pairs.
+
+    `size` pre-resizes to size x size on load. apply_transform() does the same
+    resize on every call anyway, so this is byte-identical downstream and keeps
+    2000 decoded frames near 300 MB instead of well over a gigabyte.
+    """
     from PIL import UnidentifiedImageError
     Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
     exts = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
@@ -47,7 +53,10 @@ def folder_images(path: str, n: int | None = None) -> list[tuple[str, Image.Imag
                 continue
             with Image.open(full) as im:
                 im.load()
-                out.append((f, im.convert("RGB")))
+                rgb = im.convert("RGB")
+                if size is not None and rgb.size != (size, size):
+                    rgb = rgb.resize((size, size), Image.BICUBIC)
+                out.append((f, rgb))
         except (UnidentifiedImageError, OSError) as e:
             print(f"Warning: skipping unreadable file {f}: {e}")
         if n is not None and len(out) >= n:
@@ -106,7 +115,30 @@ def _forward_embed(bundle, batch):
     return feats / feats.norm(dim=-1, keepdim=True).clamp_min(1e-12)
 
 
-def _pooled_activation(act, bundle, pool: str = "auto") -> object:
+def _to_batch_first(act, batch_size: int):
+    """Normalise a 3-D hook output to (batch, tokens, dim).
+
+    open_clip's VisionTransformer permutes to LND before self.transformer, so a
+    hook on visual.transformer.resblocks.N captures (tokens, batch, dim), while
+    timm blocks and newer batch-first open_clip builds capture (batch, tokens,
+    dim). Guessing wrong silently pools over the wrong axis -- with batch 1 the
+    shapes still line up, so nothing raises and every number is quietly wrong.
+    """
+    if act.dim() != 3:
+        return act
+    if act.shape[0] == batch_size and act.shape[1] != batch_size:
+        return act
+    if act.shape[1] == batch_size and act.shape[0] != batch_size:
+        return act.transpose(0, 1)
+    if act.shape[0] == batch_size:  # batch == tokens; ambiguous, assume batch-first
+        return act
+    raise ValueError(
+        f"Hook output {tuple(act.shape)} has no axis matching batch size {batch_size}; "
+        "pass --pool explicitly or check the hook point")
+
+
+def _pooled_activation(act, batch_size: int, pool: str = "auto") -> object:
+    act = _to_batch_first(act, batch_size)
     if pool == "auto":
         pool = "cls" if act.dim() == 3 else "mean"
     if pool == "cls":
@@ -143,7 +175,7 @@ def gate_activations(images, model_bundle, sae, preprocess, hook_name: str | Non
         for _, pil in images[:n]:
             batch = preprocess(pil).unsqueeze(0).to(device)
             _, act = _embedding_and_activation(model_bundle, batch, hook_name, sae)
-            acts.append(_pooled_activation(act, model_bundle, pool))
+            acts.append(_pooled_activation(act, batch.shape[0], pool))
     if not acts:
         raise ValueError("No images available for SAE gate")
     return torch.cat(acts, dim=0)
@@ -174,7 +206,7 @@ def extract(images, model_bundle, sae, preprocess, transforms=None, strengths=No
                     view = apply_transform(pil, t, s, size=size)
                     batch = preprocess(view).unsqueeze(0).to(device)
                     emb, act = _embedding_and_activation(model_bundle, batch, hook_name, sae)
-                    pooled = _pooled_activation(act, model_bundle, pool)
+                    pooled = _pooled_activation(act, batch.shape[0], pool)
                     if gate_n and s == 0.0 and len(gate_acts) < gate_n:
                         gate_acts.append(pooled)
                     idx, vals = sae.encode_topk(pooled[0], k_store)
@@ -189,7 +221,6 @@ def extract(images, model_bundle, sae, preprocess, transforms=None, strengths=No
 
 def extract_to_parquet(images, model_bundle, sae, preprocess, out_dir: str, **kwargs):
     out = extract(images, model_bundle, sae, preprocess, **kwargs)
-    df, gate_acts = out if isinstance(out, tuple) else (out, None)
     df, gate_acts = out if isinstance(out, tuple) else (out, None)
     os.makedirs(out_dir, exist_ok=True)
     paths = []

@@ -1,65 +1,42 @@
+"""Thin CLI over audit.dataset.build_subset. No logic lives here."""
 from __future__ import annotations
 
 import argparse
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from audit.dataset import GatedDatasetError, build_subset  # noqa: E402
 
 
-def build_stream(source: str, seed: int):
-    from datasets import load_dataset
-    if source == "imagenet-1k":
-        try:
-            ds = load_dataset("ILSVRC/imagenet-1k", split="validation", streaming=True)
-        except Exception as e:
-            if any(m in str(e).lower() for m in ("gated", "401", "unauthorized", "private")):
-                raise SystemExit(
-                    "GATED DATASET: this token lacks access to ILSVRC/imagenet-1k.\n"
-                    "  1. Open https://huggingface.co/datasets/ILSVRC/imagenet-1k while logged in\n"
-                    "  2. Submit the access form + accept the ImageNet terms, wait for approval\n"
-                    "  3. Re-run, OR bypass now with --source tiny-imagenet (public, no approval;\n"
-                    "     state the dataset swap in the report — same pipeline, different images).")
-            raise
-        return ds, "ILSVRC2012_val_"
-    for split in ("valid", "validation", "test"):
-        try:
-            return load_dataset("zh-plus/tiny-imagenet", split=split, streaming=True), "tiny_val_"
-        except Exception:
-            continue
-    raise SystemExit("Could not load zh-plus/tiny-imagenet (tried splits valid/validation/test).")
-
-
-def fetch(source: str, n: int, seed: int, out: str) -> None:
-    import time
-    for attempt in range(3):
-        try:
-            ds, prefix = build_stream(source, seed)
-            count = 0
-            for i, row in enumerate(ds.shuffle(seed=seed, buffer_size=10000).take(n)):
-                row["image"].convert("RGB").save(os.path.join(out, f"{prefix}{i:08d}.JPEG"))
-                count += 1
-                if count % 250 == 0:
-                    print(f"{count}/{n} ...", flush=True)
-            print(f"wrote {count} {source} images to {out}", flush=True)
-            return
-        except SystemExit:
-            raise
-        except Exception as e:
-            print(f"attempt {attempt + 1} failed ({e}); retrying in 10s", flush=True)
-            time.sleep(10)
-    raise SystemExit("Download failed 3 times; re-run this cell. Partial files reuse the same names, so resume is safe.")
-
-
-def main() -> None:
-    p = argparse.ArgumentParser()
+def main() -> int:
+    p = argparse.ArgumentParser(prog="make_subset")
     p.add_argument("--n", type=int, default=2000)
     p.add_argument("--out", default="data/imagenet-val-2k")
     p.add_argument("--seed", type=int, default=1337)
     p.add_argument("--source", default="imagenet-1k", choices=["imagenet-1k", "tiny-imagenet"])
+    p.add_argument("--shuffle-buffer", type=int, default=None,
+                   help="streaming shuffle buffer; larger mixes more but delays the first image")
+    p.add_argument("--fallback", action="store_true",
+                   help="fall back to the public tiny-imagenet if imagenet-1k is gated")
+    p.add_argument("--no-resume", action="store_true")
     ns = p.parse_args()
 
-    from datasets import load_dataset  # noqa: F401 (ensures dep present before starting)
-    os.makedirs(ns.out, exist_ok=True)
-    fetch(ns.source, ns.n, ns.seed, ns.out)
+    try:
+        summary = build_subset(ns.source, ns.n, ns.out, ns.seed,
+                               shuffle_buffer=ns.shuffle_buffer, resume=not ns.no_resume)
+    except GatedDatasetError as e:
+        if not ns.fallback:
+            print(e, file=sys.stderr)
+            return 2
+        alt = ns.out.rstrip("/\\") + "-tiny"
+        print(f"{e}\n\nFalling back to tiny-imagenet (--fallback) in {alt}.", file=sys.stderr)
+        summary = build_subset("tiny-imagenet", ns.n, alt, ns.seed,
+                               shuffle_buffer=ns.shuffle_buffer, resume=not ns.no_resume)
+    print(summary)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

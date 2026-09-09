@@ -80,20 +80,27 @@ def rii(curve_dict: dict) -> float:
 
 
 def rii_ci(df: pd.DataFrame, transform: str, k: int, n_boot: int = N_BOOTSTRAP, seed: int = SEED) -> tuple[float, float, float]:
-    ref = _rows(df, transform, 0.0).set_index("image_id")
-    others = sorted(s for s in df[df["transform"] == transform]["strength"].unique() if s > 0)
+    sub = df[df["transform"] == transform]
+    ref = sub[sub["strength"] == 0.0].set_index("image_id")
+    others = sorted(float(s) for s in sub["strength"].unique() if s > 0)
     ids = sorted(set(ref.index))
+    # Index the s > 0 rows in one pass. The obvious nested-loop version masks
+    # the whole frame once per (image, strength) -- ~14k full scans of a 64k-row
+    # frame on the 2000-image run, for the same answer.
+    by_pair = {(r.image_id, float(r.strength)): r
+               for r in sub.itertuples(index=False) if r.strength > 0}
     per_img_gap = []
     skipped = 0
     for i in ids:
+        ref_emb = np.asarray(ref.loc[i, "embedding"])
+        ref_set = set(ref.loc[i, "top_k_indices"][:k])
         gaps = []
         for s in others:
-            row = df[(df["transform"] == transform) & (df["strength"] == s) & (df["image_id"] == i)]
-            if row.empty:
+            row = by_pair.get((i, s))
+            if row is None:
                 continue
-            row = row.iloc[0]
-            gaps.append(cosine(np.asarray(row["embedding"]), np.asarray(ref.loc[i, "embedding"]))
-                        - jaccard(set(row["top_k_indices"][:k]), set(ref.loc[i, "top_k_indices"][:k])))
+            gaps.append(cosine(np.asarray(row.embedding), ref_emb)
+                        - jaccard(set(row.top_k_indices[:k]), ref_set))
         if not gaps:
             skipped += 1
             continue
@@ -141,13 +148,16 @@ def null_b_floor(df: pd.DataFrame, transform: str, k: int, seed: int = SEED) -> 
     ref_map = dict(zip(ref["image_id"], ref["top_k_indices"]))
     if len(ref_ids) < 2:
         return [float("nan")] * len(present)
+    pos = {img: p for p, img in enumerate(ref_ids)}  # ref_ids.index() is O(n) per call
+    n = len(ref_ids)
     means = []
     for s in present:
         cur = _rows(df, transform, s)
         cur_map = dict(zip(cur["image_id"], cur["top_k_indices"]))
         ids = sorted(set(ref_map) & set(cur_map))
-        n = len(ref_ids)
-        vals = [jaccard(set(cur_map[i][:k]), set(ref_map[ref_ids[shuffled_partner(n, ref_ids.index(i), stable_seed(seed, i))]][:k])) for i in ids]
+        vals = [jaccard(set(cur_map[i][:k]),
+                        set(ref_map[ref_ids[shuffled_partner(n, pos[i], stable_seed(seed, i))]][:k]))
+                for i in ids]
         means.append(float(np.mean(vals)) if vals else float("nan"))
     return means
 
@@ -192,4 +202,14 @@ def find_cases(df: pd.DataFrame, transform: str, k: int, n: int = 3) -> list[dic
                                "output_stability": float(ov), "feature_stability": float(fv),
                                "gap": float(ov - fv)})
     scored.sort(key=lambda d: -d["gap"])
-    return scored[:n]
+    # One row per image: the spec asks for n distinct hand-picked images, and
+    # the same image usually qualifies at several strengths.
+    best, seen = [], set()
+    for c in scored:
+        if c["image_id"] in seen:
+            continue
+        seen.add(c["image_id"])
+        best.append(c)
+        if len(best) == n:
+            break
+    return best

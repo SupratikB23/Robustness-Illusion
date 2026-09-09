@@ -23,11 +23,17 @@ dependencies = [
 
 [project.optional-dependencies]
 open-clip = ["open-clip-torch>=2.24"]
+data = ["datasets>=2.19"]
 kaggle = ["kaggle>=1.5"]
 test = ["pytest>=7.4"]
 
 [project.scripts]
 invariance-audit = "cli:main"
+
+[tool.setuptools]
+# cli.py is a top-level module, not a package. Without this the
+# `invariance-audit` console script installs but cannot import cli.
+py-modules = ["cli"]
 
 [tool.setuptools.packages.find]
 include = ["interp_core*", "audit*"]

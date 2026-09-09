@@ -123,6 +123,12 @@ def _hook_for(ns, bundle, sae):
     return resolve_hook_name(bundle.spec, sae.hook_layer, sae.hook_component)
 
 
+def _dataset_label(ns) -> str:
+    if getattr(ns, "mock", False) or getattr(ns, "mock_images", False):
+        return "mock-synthetic"
+    return ns.dataset or "unspecified"
+
+
 def _images(ns):
     from audit.extract import folder_images, synthetic_images
     if ns.mock:
@@ -171,7 +177,10 @@ def cmd_run(ns):
     summary = summarize(df, ns.k, n_boot=ns.n_boot)
     print(write_tables(summary, ns.out))
     plot_curves(summary, ns.out)
-    export_site(df, dict(images), ns.site, ns.k, n_boot=ns.n_boot)
+    # Label the site with the dataset actually used, so a mock or a
+    # fallback run can never be read as the ImageNet run.
+    export_site(df, dict(images), ns.site, ns.k, n_boot=ns.n_boot,
+                dataset=_dataset_label(ns))
     for t, v in summary.items():
         print(f"{t}: RII={v['rii']:.3f} [{v['rii_lo']:.3f}, {v['rii_hi']:.3f}]")
     return 0
@@ -235,7 +244,7 @@ def cmd_export_site(ns):
     else:
         print("Warning: no source images given; slider will show stability numbers without frame images")
         images = {}
-    print(export_site(df, images, ns.site, ns.k))
+    print(export_site(df, images, ns.site, ns.k, dataset=_dataset_label(ns)))
     return 0
 
 
